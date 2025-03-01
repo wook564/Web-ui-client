@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">    
+    <title>FastAPI 검색 클라이언트</title>
+    <script src="https://developers.kakao.com/sdk/js/kakao.js"></script>
+    <script>
+        Kakao.init('00a14c8dd77d4e2846f5e49ed7113fc7');
+        function shareToKakao() {
+            Kakao.Link.sendDefault({
+                objectType: 'feed',
+                content: {
+                    title: '지금까지의 대화',
+                    description: '',
+                    imageUrl: 'http://127.0.0.1:5500/images/share-image.png',  
+                    link: {
+                        mobileWebUrl: 'http://127.0.0.1:5500/product-page.html',  
+                        webUrl: 'http://127.0.0.1:5500/product-page.html' 
+                    }
+                },
+                buttons: [
+                    {
+                        title: '웹사이트 가기',
+                        link: {
+                            mobileWebUrl: 'http://127.0.0.1:5500/product-page.html',
+                            webUrl: 'http://127.0.0.1:5500/product-page.html'
+                    }
+                }
+            ]
+            });
+        }    
+
+        function shareToInstagram() {
+            var url = 'https://www.instagram.com/';
+            window.open(url, '_blank');  
+        }
+    </script>
+    <style>
+        body {
+            background-color: #1D2475;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 250px;
+            position: fixed;
+            left: -270px;
+            top: 0;
+            height: 100%;
+            background-color: lightgray;
+            transition: left 0.4s ease-in-out;
+            padding-top: 50px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding-left: 20px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+        }
+        .sidebar.open {
+            left: 0;
+        }
+        .sidebar-content {
+            margin-top: 30px;
+            width: 100%;
+        }
+        .sidebar a {
+            display: block;
+            padding: 15px;
+            font-size: 18px;
+            text-decoration: none;
+            color: black;
+            text-align: left;
+        }
+        .sidebar a:hover {
+            background-color: #ddd;
+        }
+        .setting-icon {
+            display: none; 
+            position: absolute;
+            bottom: 60px;  
+            right: 20px;   
+            width: 40px;   
+            height: auto;
+            cursor: pointer;
+            z-index: 100;            
+        }
+
+        .sidebar.open .setting-icon {
+            display: block;
+        }
+
+        .sidebar.open .open-btn {
+            filter: none;
+        }
+        
+        .open-btn {
+            position: absolute;
+            top: 15px;
+            width: 40px;
+            cursor: pointer;
+            z-index: 10;
+
+        }
+        .open-btn {
+            position: absolute;
+            top: 15px;
+            width: 40px;
+            cursor: pointer;
+            z-index: 10;
+            filter: brightness(0) saturate(100%) invert(88%) sepia(1%) saturate(0%) hue-rotate(0deg);
+            transition: filter 0.3s ease-in-out;
+        }
+        .open-btn { left: 20px; }
+
+        .home-btn, .share-btn {
+            position: absolute;
+            top: 15px;
+            width: 40px;
+            cursor: pointer;
+            z-index: 10;
+            filter: brightness(0) saturate(100%) invert(88%) sepia(1%) saturate(0%) hue-rotate(0deg);
+        }
+        .home-btn { right: 20px; }
+        .share-btn { right: 85px; }
+
+        body, html {
+            height: 100;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center; 
+            justify-content: flex-start; 
+            width: 100%;
+            max-width: 800px; 
+            height: calc(100vh - 80px);
+            overflow-y: auto;
+            padding: 20px;
+            box-sizing: border-box;
+            margin: auto; 
+            padding-bottom: 63px;
+        }
+
+        .scrollbar {
+            position: fixed;
+            top: 0;
+            right: 100px;
+            height: 100vh;
+            width: 8px;
+            background-color: #ddd;
+            display: none;
+            z-index: 50;
+        }
+        
+        .chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .chat-container::-webkit-scrollbar-thumb {
+            background-color: #888;
+            border-radius: 10px;
+        }
+
+        .chat-container::-webkit-scrollbar-thumb:hover {
+            background-color: #555;
+        }
+
+        .chat-container:scroll {
+            display: block;
+        }
+
+        .chat-message, .hynang-message {
+            background-color: lightgray;
+            color: black;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 20px;
+            width: 50%;
+            text-align: left;
+            word-wrap: break-word;
+            position: relative;
+        }
+        .chat-message {
+            align-self: flex-end;
+        }
+        .hynang-message {
+            background-color: white;
+            align-self: flex-start;
+            display: flex;
+            align-items: center;
+            opacity: 1;
+            transition: opacity 1s ease-in;
+        }
+        .hynang-message img {
+            width: 40px;
+            height: 40px;
+            margin-right: 10px;
+        }
+
+        .time-stamp {
+            position: absolute;
+            top: 3px;
+            right: 10px;
+            font-size: 10px;
+            color: black;
+            opacity: 0.7;
+        }
+
+        .chat-input-container {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            width: 80%;
+            transform: translateX(-50%);
+            max-width: 600px;
+            background-color: white;
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease-in-out;
+        }
+        .chat-input-container textarea {
+            border: none;
+            flex-grow: 1;
+            font-size: 14px;
+            padding: 10px;
+            outline: none;
+            border-radius: 30px;
+            resize: none;
+            height: 45px;
+            overflow-y: hidden;
+        }
+        .chat-input-container button {
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+        .chat-input-container button img {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .plus-icon {
+            position: absolute;
+            left: 28px;
+            bottom: 10px;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+        }
+        #share-menu {
+            position: absolute;
+            display: none;
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            z-index: 20;
+        }
+        #share-menu div {
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 14px;
+            color: black;
+            text-align: center;
+            white-space: nowrap;
+        }
+        #share-menu div:hover {
+            background-color: #f0f0f0;
+        }
+        #file-list-container {
+            margin-top: 10px;
+            padding: 10px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            overflow: hidden;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 10px;
+            background: #f0f0f0;
+            margin-bottom: 5px;
+            border-radius: 5px;
+        }
+        .file-name {
+            color: black; 
+        }
+        .file-item span {
+            flex-grow: 1;
+            font-size: 14px;
+        }
+
+        .remove-btn {
+            background: red;
+            color: white;
+            border: none;
+            padding: 5px;
+            border-radius: 50%;
+            cursor: pointer;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            text-align: center;
+            margin-left: 8px;
+        }
+        .remove-btn:hover {
+            background: darkred;
+        }
+        .new-chat-btn {
+            position: absolute;
+            top: 13px;
+            right: 148px; 
+            width: 45px; 
+            cursor: pointer; 
+            filter: brightness(0) invert(1); 
+            transition: filter 0.3s ease-in-out; 
+        }
+        .new-chat-btn:hover {
+            filter: brightness(0.8) invert(1); 
+        }
+        .send-btn {
+    width: 45px; /* 버튼 크기 */
+    height: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+.search-container {
+    position: fixed;
+    bottom: 7px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    max-width: 700px;
+    background: none;
+    border-radius: 30px;
+    display: flex;
+    align-items: center;
+    padding: 0px;
+    box-shadow: none;
+    transition: all 0.3s ease-in-out;
+    
+    
+}
+
+
+.input-wrapper {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    background: white;  /* 입력창만 흰색 배경 유지 */
+    border-radius: 30px;
+    padding: 10px 15px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.search-container input[type="text"] {
+    border: none;
+    flex-grow: 1;
+    font-size: 16px;
+    padding: 10px 12px;
+    outline: none;
+    border-radius: 30px;
+    height: 50px;
+    background: none;  /* 불필요한 배경 제거 */
+    box-shadow: none;  /* 불필요한 그림자 제거 */
+    position: relative;
+    top: -16px;
+}
+
+.send-btn {
+    width: 45px;
+    height: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.send-btn img {
+    width: 28px;
+    height: 28px;
+}
+
+.send-btn img {
+    width: 24px;  /* 아이콘 크기 */
+    height: 24px;
+    max-width: 100%;
+    max-height: 100%;
+}
+textarea#queryInput {
+    border: none;
+    flex-grow: 1;
+    font-size: 16px;
+    font-family: 'Arial', sans-serif;
+    padding: 10px 12px;
+    outline: none;
+    border-radius: 30px;
+    resize: none; /*  사용자가 크기 조정 못하게 막음 */
+    height: 50px;  /*  기본 높이 */
+    min-height: 50px; /*  최소 높이 */
+    max-height: 250px; /*  최대 높이 (더 이상 커지지 않도록 제한) */
+    line-height: 1.5;
+    background: none;
+    box-shadow: none;
+    position: relative;
+    top: -5px;
+    overflow-y: auto; /*  너무 길어지면 자동으로 스크롤 */
+    white-space: pre-wrap; /*  자동 줄바꿈 */
+    word-wrap: break-word; /*  단어가 길어도 개행 */
+}
+.search-results {
+    display: none !important;
+    
+}
+
+/* 연도 선택 목록 스타일 */
+.year-selector {
+    position: absolute;
+    top: 10px;
+    left: 35%;
+    transform: translateX(-50%);
+    background: white;
+    padding: 5px 12px;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    z-index: 100; /* 다른 요소 위로 */
+}
+
+.year-label {
+    margin-right: 6px;
+    color: black;
+    font-weight: bold;
+}
+
+#yearSelect {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+    </style>
+</head>
+<body>
+    <!-- 원하는 연도 선택 박스 추가 -->
+    <div class="year-selector">
+        <label for="yearSelect" class="year-label">원하는 연도 선택:</label>
+        <select id="yearSelect">
+            <option value="(선택)" selected>(선택)</option>
+            <option value="2022-2024">2022년 ~ 2024년</option>
+            <option value="2025">2025년</option>
+        </select>
+    </div>
+
+    <img src="List.png" alt="Sidebar Icon" class="open-btn" onclick="toggleSidebar()">
+    <div class="share-container">
+        <img src="New.png" alt="New Chat" class="new-chat-btn" onclick="resetChat()">
+        <img src="Share.png" alt="Share Icon" class="share-btn" onclick="toggleShareMenu()">
+        <div id="share-menu">
+            <div onclick="shareToKakao()" style="display: flex; align-items: center; line-height: 1.5;">
+                <img src="Kakaotalk.png" alt="KakaoTalk Icon" style="width: 20px; height: 20px; margin-right: 10px;">
+                <span style="line-height: 1.8;">카카오톡 공유</span>
+            </div>
+            <div onclick="shareToInstagram()" style="display: flex; align-items: center; line-height: 1.5;">
+                <img src="Instagram.png" alt="Instagram Icon" style="width: 20px; height: 20px; margin-right: 10px;">
+                <span style="line-height: 1.8;">인스타그램 공유</span>
+            </div>
+        </div>
+    </div>
+    <img src="Home.png" alt="Home Icon" class="home-btn" onclick="location.href='index.html'">
+
+    <div id="sidebar" class="sidebar">
+        <div class="sidebar-content">
+            <a href="#">오늘의 대화</a>
+            <a href="#">어제의 대화</a>
+            <a href="#">이전 대화 보기</a>
+        </div>
+        <img src="Setting.png" alt="Settings" class="setting-icon" onclick="location.href='관리자화면.html'">
+    </div>
+    
+    <div class="chat-container" id="chat-container"></div>
+
+    <div class="search-container">
+        <div class="search-results">
+            <h3>🔍 검색 결과</h3>
+            <p id="searchResultText"></p>
+        
+            <h3>🖼️ 검색된 이미지</h3>
+            <img id="searchResultImage" style="max-width: 400px; display: none;">
+        
+            <h3>🤖 LLM 응답</h3>
+            <p id="llmResponse"></p>
+        </div>
+        <div id="share-menu" style="display: none; position: absolute; bottom: 60px; right: 20px; background: white; padding: 10px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);">
+            <button onclick="shareToKakao()">카카오톡 공유</button>
+            <button onclick="shareToInstagram()">인스타그램 공유</button>
+        </div>
+        <img src="Plus.png" alt="Plus Icon" class="plus-icon" onclick="document.getElementById('file-input').click();">
+        <input type="file" id="file-input" multiple onchange="displayFileList(event)" style="display: none;">
+        <div id="file-list-container"></div>
+        <div class="search-container" >
+            <div class="input-wrapper">
+        <textarea id="queryInput" placeholder="질문을 입력하세요!" rows="1"></textarea>
+        <button type="button" class="send-btn">
+            <img src="Go.png" alt="Search Icon">
+        </button>
+    </div>
+    </div>
+
+
+<script>
+// 현재 시간을 "00:00" 형식으로 반환하는 함수.
+function getCurrentTime() {
+    const now = new Date();
+    let hours = now.getHours();
+    let minutes = now.getMinutes();
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+// 하냥이 대기 메시지 (타이핑 효과 적용).
+function addHynangTypingMessage() {
+    const chatContainer = document.getElementById("chat-container");
+
+    // 새로운 하냥이 메시지 요소 생성.
+    const messageDiv = document.createElement("div");
+    messageDiv.classList.add("hynang-message");
+
+    // 하냥이 아이콘 추가.
+    const iconImg = document.createElement("img");
+    iconImg.src = "hnyang2.ico";  
+    iconImg.alt = "하냥이";
+
+    // 텍스트 컨테이너.
+    const contentDiv = document.createElement("div");
+    contentDiv.style.display = "flex";
+    contentDiv.style.flexDirection = "column";
+
+    // 타이핑 효과를 줄 텍스트 요소.
+    const typingText = document.createElement("span");
+    typingText.innerHTML = "";  
+
+    // 현재 시간 추가.
+    const timeSpan = document.createElement("span");
+    timeSpan.classList.add("time-stamp");
+    timeSpan.innerText = getCurrentTime(); // ✅ 현재 시간 가져오기
+
+
+    contentDiv.appendChild(typingText);
+    messageDiv.appendChild(iconImg);
+    messageDiv.appendChild(contentDiv);
+    chatContainer.appendChild(messageDiv);
+    contentDiv.appendChild(timeSpan); // ✅ 시간 추가
+
+    // 최신 메시지로 스크롤.
+    chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: "smooth" });
+
+    // 한 글자씩 나타나도록 설정. (줄바꿈 문제 해결)
+    const fullText = "응답을 출력하고 있다냥!\n조금만 기다리라냥!";
+    let i = 0;
+    let tempText = "";
+
+    function typeEffect() {
+        if (i < fullText.length) {
+            if (fullText[i] === "\n") {
+                tempText += "<br>";  // 줄바꿈 문자일 때만 `<br>` 추가.
+            } else {
+                tempText += fullText[i];
+            }
+            typingText.innerHTML = tempText; // innerHTML을 직접 업데이트.
+            i++;
+            setTimeout(typeEffect, 50);
+        }
+    }
+    typeEffect();
+
+    return messageDiv;
+}
+
+window.sendQuery = async function() {
+    console.log("✅ [DEBUG] sendQuery 실행됨");
+
+    const queryInput = document.getElementById("queryInput");
+    const yearSelect = document.getElementById("yearSelect");
+
+    if (!queryInput) {
+        console.error("❌ [ERROR] queryInput 요소가 없습니다!");
+        return;
+    }
+
+    const query = queryInput.value.trim();
+    const selectedYear = yearSelect.value;
+    console.log("🔹 입력된 검색어:", query);
+    console.log("🔹 선택된 연도:", selectedYear);
+
+
+    if (!query) {
+        if (!window.alertTriggered) {  
+            window.alertTriggered = true;
+            alert("검색어를 입력해달라냥!");
+            setTimeout(() => { window.alertTriggered = false; }, 500);
+        }
+        return;
+    }
+
+    // ✅ 원하는 연도가 선택되지 않았을 경우, 경고창 띄우고 전송 중단
+    if (yearSelect.value === "(선택)") {
+        alert("원하는 연도를 선택해달라냥!");
+        return;
+    }
+
+    // 사용자 메시지를 채팅창에 추가.
+    addUserMessage(query);
+
+    // 1초 후 "응답을 출력하고 있다냥!"을 먼저 출력.
+    setTimeout(() => {
+        addHynangTypingMessage();
+
+        // "응답을 출력하고 있다냥!"이 출력된 후에 서버 요청을 보냄.
+        fetch("http://211.39.140.39:27500/rest/llm_answer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                user_query: query, 
+                selected_year: selectedYear
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`서버 오류: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("✅ [DEBUG] 서버 응답 데이터:", data);
+
+            let imageUrl = data.image_url || null; 
+            let hynangResponse = data.llm_text_answer || "이해할 수 없는 질문이다냥.\n다시 질문해 달라냥!";
+
+            // 이해할 수 없는 질문이면 "기다리라냥" 없이 최종 응답만 출력 & 이미지 메시지 X.
+            if (hynangResponse.trim() === "이해할 수 없는 질문이다냥.\n다시 질문해 달라냥!") {
+                addHynangMessage(null, hynangResponse, false, 40, true); // ✅ 이미지 X
+            } else {
+                // 정상적인 질문이면 "응답을 출력하고 있다냥!" 출력 후 2.5초 후 최종 응답 출력.
+                setTimeout(() => {
+                    addHynangMessage(imageUrl, hynangResponse, false, 40, false);
+                }, 2500);
+            }
+        })
+        .catch(error => {
+            console.error("❌ 검색 요청 실패:", error);
+            alert("❌ 검색 요청 중 오류가 발생했습니다.");
+        });
+
+    }, 1000); //1초 후 "응답을 출력하고 있다냥!" 출력.(이후 서버 요청)
+    
+    queryInput.value = "";
+};
+
+
+
+
+// 사용자 메시지 추가 함수.
+function addUserMessage(messageText) {
+    const chatContainer = document.getElementById("chat-container");
+
+    // 새로운 사용자 메시지 요소 생성.
+    const messageDiv = document.createElement("div");
+    messageDiv.classList.add("chat-message");
+
+    // 텍스트 추가.
+    const textSpan = document.createElement("span");
+    textSpan.innerText = messageText;
+
+    // 현재 시간 추가.
+    const timeSpan = document.createElement("span");
+    timeSpan.classList.add("time-stamp");
+    timeSpan.innerText = getCurrentTime(); // 🔹 현재 시간 가져오기
+
+    //  메시지 요소에 텍스트 추가.
+    messageDiv.appendChild(textSpan);
+    messageDiv.appendChild(timeSpan); // 🔹 시간 추가
+
+    // 채팅 컨테이너에 추가.
+    chatContainer.appendChild(messageDiv);
+
+    // 최신 메시지로 스크롤.
+    chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: "smooth" });
+}
+
+// 타이핑 효과 함수. (한 글자씩 출력)
+function typeWriterEffect(targetElement, text, speed = 50) {
+    let index = 0;
+    targetElement.innerHTML = ""; // 기존 내용 초기화
+
+    function type() {
+        if (index < text.length) {
+            let char = text[index];
+
+            // 띄어쓰기일 경우 &nbsp;로 변환하여 HTML에서 유지.
+            if (char === " ") {
+                char = "&nbsp;";
+            }
+
+            // 줄바꿈 처리 (HTML에서 인식 가능하도록 변환).
+            if (char === "\n") {
+                char = "<br>";
+            }
+
+            targetElement.innerHTML += char;
+            index++;
+            setTimeout(type, speed);
+        }
+    }
+    type();
+}
+function addHynangMessage(imageUrl, messageText, isWaiting = false, typingSpeed = 30, hideImageMessage = false) {
+    const chatContainer = document.getElementById("chat-container");
+
+    // 새로운 챗봇 메시지 요소 생성.
+    const messageDiv = document.createElement("div");
+    messageDiv.classList.add("hynang-message");
+
+    // 하냥이 아이콘 추가.
+    const iconImg = document.createElement("img");
+    iconImg.src = "hnyang2.ico";
+    iconImg.alt = "하냥이";
+
+    // 텍스트 컨테이너 생성.
+    const contentDiv = document.createElement("div");
+    contentDiv.style.display = "flex";
+    contentDiv.style.flexDirection = "column";
+
+    const textSpan = document.createElement("span");
+    textSpan.style.whiteSpace = "pre-line"; 
+
+    // 현재 시간 추가.
+    const timeSpan = document.createElement("span");
+    timeSpan.classList.add("time-stamp");
+    timeSpan.innerText = getCurrentTime(); // 🔹 현재 시간 가져오기
+
+    // 메시지 요소에 텍스트 및 시간 추가.
+    contentDiv.appendChild(textSpan);
+    contentDiv.appendChild(timeSpan); // 🔹 시간 추가
+
+    // 말풍선에 아이콘 + 내용 추가.
+    messageDiv.appendChild(iconImg);
+    messageDiv.appendChild(contentDiv);
+    chatContainer.appendChild(messageDiv);
+
+    if (isWaiting) {
+        // 타이핑 효과로 "응답을 출력하고 있다냥! 조금만 기다리라냥!" 출력.
+        const waitingText = "응답을 출력하고 있다냥!\n조금만 기다리라냥!";
+        textSpan.innerText = ""; // 초기화
+
+        let index = 0;
+        const typingEffect = setInterval(() => {
+            if (index < waitingText.length) {
+                textSpan.innerText += waitingText[index];
+                index++;
+            } else {
+                clearInterval(typingEffect);
+            }
+        }, 80); // 글자당 80ms 간격으로 출력.(한 글자 한글자씩 보이게 하는~)
+    } else {
+        // 최종 응답 출력.
+        typeWriterEffect(textSpan, messageText, typingSpeed);
+    }
+
+    contentDiv.appendChild(textSpan);
+
+ // 최종 응답 박스에만 이미지 추가.
+  // 이미지 관련 메시지 처리. (하냥이 첫 메시지에는 숨김)
+  // 이해할 수 없는 질문일 경우, "검색된 이미지: X"를 출력하지 않기.
+    if (!hideImageMessage && messageText.trim() !== "이해할 수 없는 질문이다냥.\n다시 질문해 달라냥!") {
+        if (imageUrl) {
+            const imageText = document.createElement("span");
+            imageText.innerText = "\n검색된 이미지:";
+            imageText.style.fontWeight = "bold";
+            contentDiv.appendChild(imageText);
+
+            const imageElement = document.createElement("img");
+            imageElement.src = imageUrl;
+            imageElement.alt = "검색된 이미지";
+            imageElement.style.maxWidth = "150px"; 
+            imageElement.style.borderRadius = "8px"; 
+            imageElement.style.marginTop = "5px";
+            contentDiv.appendChild(imageElement);
+        } else {
+            const imageText = document.createElement("span");
+            imageText.innerHTML = `<b style="color: red;">검색된 이미지: X</b>`;
+            contentDiv.appendChild(imageText);
+        }
+    }
+
+    // 말풍선에 아이콘 + 내용 추가.
+    messageDiv.appendChild(iconImg);
+    messageDiv.appendChild(contentDiv);
+
+    // 채팅 컨테이너에 추가.
+    chatContainer.appendChild(messageDiv);
+
+    // 메시지가 보이도록 opacity 수정.
+    setTimeout(() => {
+        messageDiv.style.opacity = "1";
+    }, 50);
+
+    // 최신 메시지로 스크롤.
+    setTimeout(scrollToLastHynangMessage, 100);
+}
+
+
+window.toggleSidebar = function() {
+            var sidebar = document.getElementById("sidebar");
+            console.log("✅ toggleSidebar 실행됨");  // 디버깅용 로그 추가
+            var openBtn = document.querySelector(".open-btn");
+            console.log("현재 사이드바 클래스:", sidebar.classList);
+
+            sidebar.classList.toggle("open");
+
+            if (sidebar.classList.contains("open")) {
+                openBtn.style.filter = "none";
+            } else {
+                openBtn.style.filter = "brightness(0) saturate(100%) invert(88%) sepia(1%) saturate(0%) hue-rotate(0deg)";
+            }
+        };
+
+        function resetChat() {
+    console.log("✅ [DEBUG] resetChat 실행됨");
+    
+    // 채팅 컨테이너 내용 초기화.
+    document.getElementById("chat-container").innerHTML = "";
+
+    // 검색 결과 초기화.
+    document.getElementById("searchResultText").innerText = "";
+    document.getElementById("llmResponse").innerText = "";
+
+    alert("새로운 대화를 시작합니다!");
+
+    // 하냥이 첫 메시지 자동 출력. (대화창 초기화 후)
+    setTimeout(() => {
+        addHynangMessage(null, "궁금한게 있냥?\n나한테 다 물어봐랑!", false, 50, true);
+    }, 1000);
+}
+window.toggleShareMenu = function() {
+    var menu = document.getElementById("share-menu");
+    var shareBtn = document.querySelector(".share-btn");
+
+    if (menu.style.display === "none" || menu.style.display === "") {
+        var rect = shareBtn.getBoundingClientRect();
+        menu.style.top = rect.bottom + window.scrollY + 10 + "px";  
+        menu.style.left = (rect.left - 65) + "px"; 
+        menu.style.display = "block";
+    } else {
+        menu.style.display = "none";
+    }
+};
+
+// Shift + Enter → 입력창과 입력창을 감싸는 박스를 확장.
+// Ctrl + Z → 입력창과 박스를 축소.
+function handleTextareaResize(event) {
+    const inputField = document.getElementById("queryInput");
+    const wrapper = document.querySelector(".input-wrapper"); // 입력창을 감싸는 박스.
+
+    if (!inputField || !wrapper) return;
+
+    let expansionAmount = 15; // 확장되는 길이 조절.
+    let maxHeight = 200; //  최대 높이 제한.
+    let minHeight = 50; // 최소 높이.
+
+    if (event.key === "Enter" && event.shiftKey) { 
+        event.preventDefault(); // 기본 동작 방지 (전송 막기)
+
+        // scrollHeight을 사용하지 않고, 일정 크기씩 증가.
+        let currentHeight = parseInt(window.getComputedStyle(inputField).height);
+        let newHeight = Math.min(currentHeight + expansionAmount, maxHeight);
+        inputField.style.height = `${newHeight}px`;
+
+        let wrapperHeight = parseInt(window.getComputedStyle(wrapper).height);
+        let newWrapperHeight = Math.min(wrapperHeight + expansionAmount, maxHeight);
+        wrapper.style.height = `${newWrapperHeight}px`;
+    }
+
+    if (event.key === "z" && event.ctrlKey) {  
+        event.preventDefault(); // 기본 Ctrl+Z 동작 방지.
+
+       // 최소 높이를 보장하면서 일정 크기씩 감소.
+        let currentHeight = parseInt(window.getComputedStyle(inputField).height);
+        let newHeight = Math.max(currentHeight - expansionAmount, minHeight);
+        inputField.style.height = `${newHeight}px`;
+
+        let wrapperHeight = parseInt(window.getComputedStyle(wrapper).height);
+        let newWrapperHeight = Math.max(wrapperHeight - expansionAmount, minHeight);
+        wrapper.style.height = `${newWrapperHeight}px`;
+    }
+}
+// .Enter 키 입력 시 실행될 함수.(shift enter 관련)
+function handleEnterKey(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault(); // 기본 줄바꿈 막기
+        console.log("🔹 Enter 키 감지됨 (질문 전송)");
+        sendQuery(); // 질문 전송
+    }
+}
+
+
+// DOM이 로드된 후 이벤트 리스너 등록.
+document.addEventListener("DOMContentLoaded", function() {
+    console.log("✅ [DEBUG] 메인화면 로드됨");
+
+    // 페이지 로드 시 기존 채팅 불러오기.
+    loadChatHistory();
+
+    const inputField = document.getElementById("queryInput");
+    const wrapper = document.querySelector(".input-wrapper"); // 부모 박스
+    const searchButton = document.querySelector(".send-btn"); // 전송 버튼 선택
+    let prevHeights = [];  // 🔹 높이 변경 이력 저장 (Ctrl+Z 복구용)
+    const defaultWrapperHeight = wrapper ? wrapper.offsetHeight : 60; // 기본 높이 저장
+
+    console.log("✅ [DEBUG] inputField:", inputField);
+    console.log("✅ [DEBUG] searchButton:", searchButton);
+    console.log("✅ [DEBUG] searchButton:", searchButton);
+
+     // 하냥이 첫 메시지 자동 출력 (if 대화 내역이 없을 때만)
+    if (!sessionStorage.getItem("chatHistory")) {
+        setTimeout(() => {
+            addHynangMessage(null, "궁금한게 있냥?\n나한테 다 물어봐랑!", false, 50, true);
+        }, 1000);
+    };
+    
+    if (inputField) {
+        // 기존 이벤트 제거 후 다시 추가. (중복 실행 방지)
+        inputField.removeEventListener("keydown", handleEnterKey);
+        inputField.addEventListener("keydown", handleEnterKey);
+        
+        inputField.removeEventListener("keydown", handleTextareaResize);
+        inputField.addEventListener("keydown", handleTextareaResize);
+        const yearSelect = document.getElementById("yearSelect");
+
+        if (yearSelect) {
+        yearSelect.addEventListener("change", function () {
+            const selectedYear = yearSelect.value;
+            let yearText = "";
+
+            if (selectedYear === "(선택)") {
+                inputField.placeholder = "질문을 입력하세요!";
+                return; // 기본 상태 유지
+            } else if (selectedYear === "2022-2024") {
+                yearText = "현재 2022년 ~ 2024년 선택";
+            } else if (selectedYear === "2025") {
+                yearText = "현재 2025년 선택";
+            }
+
+            inputField.placeholder = `질문을 입력하세요! (${yearText})`;
+        });
+    }   
+    } else {
+        console.error("❌ queryInput을 찾을 수 없습니다!");
+    }
+
+    if (searchButton) {
+        // 🚨 기존 이벤트 제거 후 다시 추가 (중복 실행 방지)
+        searchButton.removeEventListener("click", sendQuery);
+        searchButton.addEventListener("click", sendQuery);
+    } else {
+        console.error("❌ 검색 버튼을 찾을 수 없습니다!");
+    }
+});
+
+// 현재 채팅 내용을 저장하는 함수.
+function saveChatHistory() {
+    const chatContainer = document.getElementById("chat-container");
+    sessionStorage.setItem("chatHistory", chatContainer.innerHTML);
+}
+
+// 페이지 로드 시 기존 채팅 기록 불러오기.
+function loadChatHistory() {
+    const chatContainer = document.getElementById("chat-container");
+    const savedChat = sessionStorage.getItem("chatHistory");
+    if (savedChat) {
+        chatContainer.innerHTML = savedChat;
+    }
+}
+
+// 페이지를 떠나거나 새로고침할 때 채팅 내용 저장.
+window.addEventListener("beforeunload", function() {
+    saveChatHistory();
+});
+
+document.querySelector(".home-btn").addEventListener("click", function() {
+    saveChatHistory(); // 대화 저장 후 이동.
+    location.href = "index.html";
+});
+
+document.querySelector(".setting-icon").addEventListener("click", function() {
+    saveChatHistory(); // 대화 저장 후 이동.
+    location.href = "관리자화면.html";
+});
+
+function scrollToLastHynangMessage() {
+    const chatContainer = document.getElementById("chat-container");
+    const hynangMessages = document.querySelectorAll(".hynang-message"); // 모든 하냥이 메시지 가져오기.
+
+    if (hynangMessages.length > 0) {
+        const lastHynangMessage = hynangMessages[hynangMessages.length - 1]; // 마지막 하냥이 메시지 선택.
+
+        lastHynangMessage.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+}
+
+
+
+</script>
+
+</body>
+</html>
+
